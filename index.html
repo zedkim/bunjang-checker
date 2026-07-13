@@ -1625,25 +1625,31 @@ html, body {
 }
 .preview-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .preview-tab {
-  background: transparent;
-  border: 1px solid transparent;
+  background: var(--surface);
+  border: 1px solid var(--border-strong, var(--border));
   color: var(--text-dim);
-  padding: 7px 12px;
-  border-radius: 7px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
   cursor: pointer;
   font-family: inherit;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s;
 }
 .preview-tab.active {
-  background: var(--primary-bg);
-  color: var(--primary);
-  border-color: var(--primary-light);
+  background: var(--text-strong, #111);
+  color: #ffffff;
+  border-color: var(--text-strong, #111);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
 }
 .preview-tab:hover:not(.active) {
   color: var(--text);
+  border-color: var(--text-mute);
   background: var(--surface-3);
+  transform: translateY(-1px);
 }
+.preview-tab:active { transform: translateY(0); }
 
 .preview-canvas {
   padding: 36px 24px;
@@ -2059,10 +2065,10 @@ html, body {
       <div class="preview-card">
         <div class="preview-toolbar">
           <div class="preview-tabs">
-            <button class="preview-tab active" data-view="original">원본</button>
+            <button class="preview-tab" data-view="original">원본</button>
             <button class="preview-tab" data-view="regions">영역 가이드</button>
             <button class="preview-tab" data-view="ruler">치수 표시</button>
-            <button class="preview-tab" data-view="match">정합 검사</button>
+            <button class="preview-tab active" data-view="match">정합 검사</button>
           </div>
         </div>
         <div class="preview-canvas" id="previewCanvas">
@@ -2426,7 +2432,7 @@ const state = {
   img: null,
   imageData: null,
   toggles: { strict: true, ocr: true },
-  view: 'original',
+  view: 'match',
   basicResults: [],
   advancedResults: [],
   ocrText: null,
@@ -3267,10 +3273,37 @@ function checkCommonBasics(basic, s) {
 }
 
 // ============ OCR 공통 헬퍼 ============
+// 로고로 추정되는 라인 (짧은 영문 위주 — 키워드 배너는 로고 추가 배치 가능)
+function isLogoLikeLine(line) {
+  const t = cleanOcrLineText(line.text);
+  if (!t) return false;
+  const latin = (t.match(/[A-Za-z]/g) || []).length;
+  const total = t.replace(/\s+/g, '').length;
+  return total > 0 && latin / total >= 0.7 && t.length <= 14;
+}
+
 function ocrLinesBySize() {
   if (!state.ocrLines || !state.ocrLines.length) return null;
-  const byH = [...state.ocrLines].sort((a, b) => (b.bbox.y1 - b.bbox.y0) - (a.bbox.y1 - a.bbox.y0));
-  return { main: byH[0] || null, sub: byH[1] || null };
+  let pool = state.ocrLines;
+  let logo = null;
+  // 키워드 배너: 로고(짧은 영문 라인)는 메인/서브 후보에서 제외
+  if (state.category === 'keyword') {
+    const logos = pool.filter(isLogoLikeLine);
+    if (logos.length && logos.length < pool.length) {
+      logo = logos[0];
+      pool = pool.filter(l => !isLogoLikeLine(l));
+    }
+  }
+  const byH = [...pool].sort((a, b) => (b.bbox.y1 - b.bbox.y0) - (a.bbox.y1 - a.bbox.y0));
+  let main = byH[0] || null;
+  let sub = byH[1] || null;
+  // 서브는 메인 아래에 있는 라인을 우선
+  if (main) {
+    const below = pool.filter(l => l !== main && l.bbox.y0 >= main.bbox.y1 - 4)
+      .sort((a, b) => (b.bbox.y1 - b.bbox.y0) - (a.bbox.y1 - a.bbox.y0));
+    if (below.length) sub = below[0];
+  }
+  return { main, sub, logo };
 }
 
 function pushOcrTextInfo(advanced) {
@@ -3668,7 +3701,7 @@ function checkKeyword(advanced, s) {
     advanced.push({
       title: '텍스트 규칙',
       status: 'info',
-      detail: '메인 최대 <strong>16자</strong> / 서브 최대 <strong>20자</strong> (띄어쓰기 포함) · <strong>좌측 정렬</strong> · <strong>서브텍스트 문구 끝에 &gt; 아이콘 배치</strong> · 폰트 설정 변경 금지',
+      detail: '메인 최대 <strong>16자</strong> / 서브 최대 <strong>20자</strong> (띄어쓰기 포함) · <strong>좌측 정렬</strong> · <strong>서브텍스트 문구 끝에 &gt; 아이콘 배치</strong> · 폰트 설정 변경 금지 · <strong>로고 추가 배치 가능</strong> (가이드 미명시, 텍스트 상단 권장 — 로고는 글자 수·위치 검수에서 자동 제외)',
       value: '16/20자'
     });
     advanced.push({
@@ -3988,7 +4021,8 @@ function checkTextRegionPosition(advanced) {
   const b = lines.main.bbox;
   const x0 = b.x0 / k, x1 = b.x1 / k, y0 = b.y0 / k, y1 = b.y1 / k;
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-  const tolX = s.w * 0.05, tolY = s.h * 0.07;
+  const tolX = s.w * 0.05;
+  const tolY = s.h * (state.category === 'keyword' ? 0.28 : 0.07);
   const inside = cx >= region.x - tolX && cx <= region.x + region.w + tolX &&
                  cy >= region.y - tolY && cy <= region.y + region.h + tolY;
   const overflowX = (x1 - x0) > region.w * 1.18;
@@ -4253,17 +4287,27 @@ function getTextMatches() {
   const lines = ocrLinesBySize();
   const regions = getRegions();
   const out = [];
+  const tolYFactor = state.category === 'keyword' ? 0.28 : 0.07; // 키워드: 로고 추가 배치 시 세로 이동 허용
   [['maintext', lines.main, '메인텍스트'], ['subtext', lines.sub, '서브텍스트']].forEach(([key, line, name]) => {
     const region = regions.find(r => r.key === key);
     if (!region || !line) return;
     const b = { x0: line.bbox.x0 / k, y0: line.bbox.y0 / k, x1: line.bbox.x1 / k, y1: line.bbox.y1 / k };
     const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
-    const tolX = s.w * 0.05, tolY = s.h * 0.07;
+    const tolX = s.w * 0.05, tolY = s.h * tolYFactor;
     const inside = cx >= region.x - tolX && cx <= region.x + region.w + tolX &&
                    cy >= region.y - tolY && cy <= region.y + region.h + tolY;
     const overflow = (b.x1 - b.x0) > region.w * 1.18;
     out.push({ region, box: b, name, ok: inside && !overflow });
   });
+  if (lines.logo) {
+    const l = lines.logo;
+    out.push({
+      region: null,
+      box: { x0: l.bbox.x0 / k, y0: l.bbox.y0 / k, x1: l.bbox.x1 / k, y1: l.bbox.y1 / k },
+      name: '로고 (추가 배치 가능)',
+      ok: true
+    });
+  }
   return out;
 }
 
@@ -4288,6 +4332,20 @@ function drawMatchView(ctx, sx, sy) {
   if (matches && matches.length) {
     matches.forEach(m => {
       const col = m.ok ? '#16a34a' : '#dc2626';
+      if (!m.region) {
+        // 영역 없는 항목 (예: 키워드 배너 로고) — 감지 박스만 표시
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(m.box.x0 * sx, m.box.y0 * sy, (m.box.x1 - m.box.x0) * sx, (m.box.y1 - m.box.y0) * sy);
+        ctx.font = 'bold 11px Pretendard Variable, Pretendard, sans-serif';
+        const lw = ctx.measureText(m.name).width + 10;
+        const lly = Math.max(0, m.box.y0 * sy - 17);
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(m.box.x0 * sx, lly, lw, 16);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(m.name, m.box.x0 * sx + 5, lly + 12);
+        return;
+      }
       ctx.fillStyle = hexToRgba(col, 0.16);
       ctx.fillRect(m.region.x * sx, m.region.y * sy, m.region.w * sx, m.region.h * sy);
       ctx.strokeStyle = col;
