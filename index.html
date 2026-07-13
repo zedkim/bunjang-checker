@@ -55,6 +55,7 @@
 }
 </style>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://unpkg.com/ag-psd@25/dist/bundle.js"></script>
 <style>
 :root {
   /* ===== 번개장터 블랙앤화이트 디자인 시스템 ===== */
@@ -1988,7 +1989,7 @@ html, body {
         </svg>
         <div class="upload-title">파일 선택 또는 드래그</div>
         <div class="upload-sub" id="uploadSub">WebP · 1000×1000px · ≤300KB</div>
-        <input type="file" id="fileInput" accept="image/webp, image/png, image/jpeg">
+        <input type="file" id="fileInput" accept="image/webp, image/png, image/jpeg, .psd">
       </label>
       <div class="ocr-status" id="ocrStatus">
         <div class="ocr-label">
@@ -2029,7 +2030,7 @@ html, body {
 
     <div class="notice-box">
       <strong>💡 자동 검수 안내</strong>
-      해상도·용량·형식·여백·색상은 정확히 검수됩니다. 텍스트 인식(OCR)은 참고용이며, <strong>폰트 종류·정확한 픽셀 단위·디자인 의도</strong>는 담당자가 시각으로 최종 확인합니다.
+      해상도·용량·형식·색상·영역 위치(공식 PSD 템플릿 좌표 기준)를 검수합니다. <strong>작업 PSD 파일을 업로드하면 폰트·사이즈·컬러·레이어 구성까지 정밀 검수</strong>됩니다. 이미지 OCR은 참고용이며 디자인 의도는 담당자가 최종 확인합니다.
     </div>
   </aside>
 
@@ -2527,7 +2528,7 @@ document.querySelectorAll('.preview-tab[data-view]').forEach(tab => {
 function updateUploadHint() {
   const s = currentSpec();
   document.getElementById('uploadSub').textContent =
-    `${s.formats.map(f => f.toUpperCase()).join('/')} · ${s.w}×${s.h}px · ≤${s.kb}KB`;
+    `${s.formats.map(f => f.toUpperCase()).join('/')} 또는 PSD · ${s.w}×${s.h}px · ≤${s.kb}KB`;
 }
 
 function updateGuideBox() {
@@ -2646,6 +2647,10 @@ function autoDetectCategory(width, height) {
 }
 
 async function handleFile(file) {
+  if (/\.psd$/i.test(file.name)) {
+    handlePsdFile(file);
+    return;
+  }
   if (!file.type.startsWith('image/')) {
     alert('이미지 파일만 업로드 가능합니다.\nWebP(권장), PNG, JPG 형식으로 업로드해주세요.\n(PSD, PDF 등 디자인 원본 파일은 업로드할 수 없습니다)');
     return;
@@ -2876,6 +2881,277 @@ function areTextsSimilar(t1, t2) {
   return false;
 }
 
+// ============ PSD 정밀 검수 모드 (ag-psd) ============
+// 공식 PSD 템플릿에서 추출한 텍스트 규격 (폰트 / 사이즈pt / 고정 컬러)
+const PSD_TEXT_SPECS = {
+  banner: {
+    main:  { font: 'Pretendard-Bold',   size: 45.83, color: '#4C4C4C' },
+    sub:   { font: 'Pretendard-Medium', size: 33.33, color: '#777777' },
+    simui: { font: 'Pretendard-Medium', size: 25,    color: '#777777' }
+  },
+  splash: {
+    main:  { font: 'Pretendard-Bold',    size: 62.5, color: '#FFFFFF' },
+    simui: { font: 'Pretendard-Regular', size: 25,   color: null }
+  },
+  append: {
+    main:  null, // 폰트 커스텀 가능
+    simui: { font: 'Pretendard-Regular', size: 16.67, color: null } // 컬러 변경 가능
+  },
+  homepopup: {
+    main:  { font: 'Pretendard-Bold',   size: 41.67, color: null }, // 밝은 #191919 / 어두운 #FFFFFF
+    cta:   { font: 'Pretendard-Bold',   size: 29,    color: null },
+    simui: { font: 'Pretendard-Medium', size: 16.67, color: null }
+  },
+  keyword: {
+    main:  { font: 'Pretendard-Bold', size: 33.33, color: null },
+    sub:   { font: 'Pretendard-Bold', size: 20.83, color: null },
+    badge: { font: 'Pretendard-Bold', size: 20.83, color: '#FFFFFF' }
+  },
+  topbanner: {
+    main: { font: 'Pretendard-Bold', size: 33.33, color: null } // 웹PC는 75pt — 아래에서 분기
+  }
+};
+
+function psdRoleOf(name) {
+  const n = String(name || '');
+  if (/메인/.test(n)) return 'main';
+  if (/서브/.test(n)) return 'sub';
+  if (/심의필/.test(n)) return 'simui';
+  if (/CTA/i.test(n)) return 'cta';
+  if (/뱃지/.test(n)) return 'badge';
+  if (/텍스트/.test(n)) return 'main';
+  return null;
+}
+
+function psdColorHex(c) {
+  if (!c) return null;
+  const r = Math.round(c.r || 0), g = Math.round(c.g || 0), b = Math.round(c.b || 0);
+  return rgbToHex([r, g, b]);
+}
+
+async function handlePsdFile(file) {
+  if (typeof agPsd === 'undefined') {
+    alert('PSD 파서 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해주세요.');
+    return;
+  }
+  state.file = file;
+  state.fileBytes = file.size;
+  state.fileFormat = 'psd';
+  state.isPng24 = false;
+  state.ocrText = null;
+  state.ocrLines = null;
+  document.getElementById('ocrStatus').classList.remove('active', 'done');
+
+  try {
+    const buf = await file.arrayBuffer();
+    const psd = agPsd.readPsd(buf, { skipLayerImageData: true, skipThumbnail: true });
+    runPsdChecks(psd, file);
+  } catch (err) {
+    console.error(err);
+    alert('PSD 파일을 해석하지 못했습니다.\n' + (err && err.message ? err.message : ''));
+  }
+}
+
+function runPsdChecks(psd, file) {
+  autoDetectCategory(psd.width, psd.height);
+  const s = currentSpec();
+  const basic = [];
+  const advanced = [];
+
+  // ── 기본 규격 ──
+  const sizeMatch = psd.width === s.w && psd.height === s.h;
+  basic.push({
+    title: '캔버스 사이즈',
+    status: sizeMatch ? 'pass' : 'fail',
+    detail: sizeMatch ? 'PSD 캔버스가 템플릿 규격과 일치합니다' : `템플릿 규격 <code>${s.w}×${s.h}px</code>와 다릅니다`,
+    value: `${psd.width}×${psd.height}`
+  });
+  basic.push({
+    title: 'PSD 정밀 검수 모드',
+    status: 'info',
+    detail: `레이어 구조·폰트·컬러를 원본 데이터 기준으로 검사합니다. <strong>최종 전달 파일은 ${s.formats.map(f => f.toUpperCase()).join('/')}로 내보내기</strong> 후 이미지 검수도 진행해주세요 (용량 ≤${s.kb}KB)`,
+    value: 'PSD'
+  });
+
+  // ── 레이어 평탄화 ──
+  const flat = [];
+  (function walk(children, path, parentVisible) {
+    (children || []).forEach(l => {
+      const own = l.hidden !== true;
+      const visible = parentVisible && own;
+      flat.push({ l, name: String(l.name || ''), path: path.concat(String(l.name || '')), visible });
+      if (l.children) walk(l.children, path.concat(String(l.name || '')), visible);
+    });
+  })(psd.children, [], true);
+
+  // 1) 영역가이드 레이어 가시성 (저장 시 눈 끄기)
+  const guideRe = /(영역\s?가이드|노출가이드|저장\s?시 눈|저장시 눈|가이드\s?\(저장|가이드\(저장|예시이미지 \(저장|예시 \(저장)/;
+  const guideOn = flat.filter(f => guideRe.test(f.name) && f.visible);
+  if (guideOn.length > 0) {
+    advanced.push({
+      title: '영역가이드 레이어 (눈 끄기)',
+      status: 'fail',
+      detail: `저장 전 눈을 꺼야 하는 가이드 레이어가 <strong>${guideOn.length}개 켜져</strong> 있습니다: ` +
+        guideOn.slice(0, 4).map(f => `<code>${escapeHtml(f.name)}</code>`).join(', ') + (guideOn.length > 4 ? ' 외' : ''),
+      value: `${guideOn.length}개 ON`
+    });
+  } else {
+    advanced.push({
+      title: '영역가이드 레이어 (눈 끄기)',
+      status: 'pass',
+      detail: '가이드 레이어가 모두 꺼져 있거나 정리되어 있습니다',
+      value: '양호'
+    });
+  }
+
+  // 2) 템플릿 플레이스홀더 문구 잔존
+  const phRe = /(이곳에 작성|작성해주세요|이곳에 위치|이곳에 업로드|이곳에 넣어주세요|문구 작성|이곳에 배경이미지)/;
+  const phLayers = flat.filter(f => f.visible && f.l.text && phRe.test(f.l.text.text || ''));
+  if (phLayers.length > 0) {
+    advanced.push({
+      title: '템플릿 문구 잔존',
+      status: 'fail',
+      detail: `템플릿의 안내 문구가 수정되지 않은 채 남아 있습니다: ` +
+        phLayers.slice(0, 4).map(f => `<code>${escapeHtml((f.l.text.text || '').slice(0, 24))}</code>`).join(', '),
+      value: `${phLayers.length}건`
+    });
+  }
+
+  // 3) 텍스트 레이어 폰트·사이즈·컬러 정밀 검사
+  const specSet = PSD_TEXT_SPECS[state.category] || {};
+  const textLayers = flat.filter(f => f.visible && f.l.text);
+  let checkedFonts = 0;
+  textLayers.slice(0, 12).forEach(f => {
+    const role = psdRoleOf(f.name);
+    let expected = specSet[role];
+    if (state.category === 'topbanner' && state.type === 'web' && role === 'main') {
+      expected = { font: 'Pretendard-Bold', size: 75, color: null };
+    }
+    if (state.category === 'splash' && state.type === 'full_img') expected = null;
+    if (expected === undefined) expected = null;
+    if (!expected) {
+      if ((state.category === 'append' && role === 'main') || (state.category === 'splash' && state.type === 'full_img')) {
+        advanced.push({
+          title: `[텍스트] ${f.name.slice(0, 24)}`,
+          status: 'info',
+          detail: '이 영역은 가독성을 전제로 <strong>폰트 커스텀이 허용</strong>됩니다',
+          value: '커스텀 가능'
+        });
+      }
+      return;
+    }
+    const t = f.l.text;
+    const st = Object.assign({}, t.style || {}, (t.styleRuns && t.styleRuns[0] && t.styleRuns[0].style) || {});
+    const fontName = (st.font && st.font.name) ? String(st.font.name) : '?';
+    let size = typeof st.fontSize === 'number' ? st.fontSize : null;
+    if (size && t.transform && typeof t.transform[3] === 'number') size = size * t.transform[3];
+    const colorHexV = psdColorHex(st.fillColor);
+    const problems = [];
+    if (!new RegExp('^' + expected.font + '$', 'i').test(fontName)) {
+      if (/^Pretendard/i.test(fontName)) problems.push(`굵기가 다릅니다 (현재 <code>${escapeHtml(fontName)}</code> → 지정 <code>${expected.font}</code>)`);
+      else problems.push(`지정 폰트가 아닙니다 (현재 <code>${escapeHtml(fontName)}</code> → 지정 <code>${expected.font}</code>)`);
+    }
+    if (size !== null && Math.abs(size - expected.size) > expected.size * 0.06) {
+      problems.push(`사이즈가 다릅니다 (현재 <code>${size.toFixed(1)}pt</code> → 지정 <code>${expected.size}pt</code>)`);
+    }
+    if (expected.color && colorHexV && !isColorClose(hexToRgb(colorHexV), expected.color, 12)) {
+      problems.push(`컬러가 다릅니다 (현재 <code>${colorHexV}</code><span class="color-chip" style="background:${colorHexV}"></span> → 지정 <code>${expected.color}</code>)`);
+    }
+    checkedFonts++;
+    if (problems.length) {
+      advanced.push({
+        title: `[텍스트] ${f.name.slice(0, 24)}`,
+        status: 'fail',
+        detail: '폰트 설정 변경 금지 위반 — ' + problems.join(' / '),
+        value: '수정필요'
+      });
+    } else {
+      advanced.push({
+        title: `[텍스트] ${f.name.slice(0, 24)}`,
+        status: 'pass',
+        detail: `폰트 규격 일치 — <code>${escapeHtml(fontName)}</code> ${size !== null ? size.toFixed(1) + 'pt' : ''} ${colorHexV || ''}`,
+        value: '일치'
+      });
+    }
+  });
+  if (checkedFonts === 0 && textLayers.length === 0) {
+    advanced.push({
+      title: '텍스트 레이어',
+      status: 'info',
+      detail: '보이는 텍스트 레이어가 없습니다. 텍스트를 이미지로 래스터화한 경우 폰트 검사가 불가능하니, 텍스트 레이어를 유지한 PSD로 검수를 권장합니다',
+      value: '0개'
+    });
+  }
+
+  // 4) 텍스트 레이어 위치 vs 템플릿 영역
+  if (sizeMatch) {
+    const mainRegion = getRegions().find(r => r.key === 'maintext');
+    const mainLayer = textLayers.find(f => psdRoleOf(f.name) === 'main');
+    if (mainRegion && mainLayer) {
+      const L = mainLayer.l;
+      const cx = ((L.left || 0) + (L.right || 0)) / 2;
+      const cy = ((L.top || 0) + (L.bottom || 0)) / 2;
+      const tolX = s.w * 0.05, tolY = s.h * 0.07;
+      const inside = cx >= mainRegion.x - tolX && cx <= mainRegion.x + mainRegion.w + tolX &&
+                     cy >= mainRegion.y - tolY && cy <= mainRegion.y + mainRegion.h + tolY;
+      advanced.push({
+        title: '메인텍스트 위치 (레이어 좌표)',
+        status: inside ? 'pass' : 'warn',
+        detail: inside
+          ? `메인텍스트 레이어가 템플릿 지정 위치에 있습니다 (레이어 ${L.left},${L.top}~${L.right},${L.bottom})`
+          : `메인텍스트 레이어가 템플릿 지정 영역(${mainRegion.x},${mainRegion.y} ${mainRegion.w}×${mainRegion.h})에서 벗어나 있습니다 (현재 ${L.left},${L.top}~${L.right},${L.bottom})`,
+        value: inside ? '일치' : '확인필요'
+      });
+    }
+  }
+
+  // ── 미리보기 + 투명배경 검사 (합성 이미지) ──
+  document.getElementById('resultFilename').textContent = file.name;
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('resultArea').classList.remove('hidden');
+  state.img = { width: psd.width, height: psd.height, complete: true };
+  state.imageData = null;
+  if (psd.canvas) {
+    try {
+      document.getElementById('previewImg').src = psd.canvas.toDataURL();
+      state.imageData = psd.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, psd.width, psd.height);
+    } catch (e) { /* 미리보기 실패해도 검수는 계속 */ }
+  } else {
+    document.getElementById('previewImg').removeAttribute('src');
+    advanced.push({
+      title: '합성 미리보기',
+      status: 'info',
+      detail: 'PSD에 합성 이미지가 저장되어 있지 않아 미리보기를 표시할 수 없습니다 (Photoshop 저장 시 "호환성 최대화" 옵션 권장)',
+      value: '-'
+    });
+  }
+  if (state.imageData && s.transparent) {
+    const tr = checkTransparency(state.imageData).transparentRatio;
+    if (s.transparent === 'require') {
+      const ok = tr > 0.01;
+      basic.push({
+        title: '투명 배경 (필수)',
+        status: ok ? 'pass' : 'warn',
+        detail: ok ? `투명 영역 ${(tr * 100).toFixed(1)}% 감지 — 내보내기 시 투명 배경 유지 필요` : '합성 이미지에서 투명 영역이 감지되지 않습니다. 배경 레이어를 끄고 내보내야 합니다',
+        value: ok ? '투명' : '확인필요'
+      });
+    } else {
+      const ok = tr < 0.005;
+      basic.push({
+        title: '투명 배경 (금지)',
+        status: ok ? 'pass' : 'warn',
+        detail: ok ? '투명 영역 없음 (가이드 충족)' : `투명 영역 ${(tr * 100).toFixed(1)}% 감지 — 이 지면은 투명 배경 금지입니다`,
+        value: ok ? '불투명' : '확인필요'
+      });
+    }
+  }
+
+  state.basicResults = basic;
+  state.advancedResults = advanced;
+  document.getElementById('resultType').textContent = `[PSD 정밀 검수] ${s.catName} · ${s.typeName}`;
+  finalizeRender();
+}
+
 // ============ 검수 디스패처 ============
 function runChecks() {
   if (!state.img) return;
@@ -2892,6 +3168,9 @@ function runChecks() {
   else if (state.category === 'keyword') checkKeyword(advanced, s);
   else if (state.category === 'topbanner') checkTopbanner(advanced, s);
 
+  if (state.ocrLines && state.ocrLines.length > 0) {
+    checkTextRegionPosition(advanced);
+  }
   if (!(state.ocrLines && state.ocrLines.length > 0) && state.toggles.ocr && state.ocrRunning) {
     advanced.push({ title: '텍스트 자동 인식', status: 'info', detail: '텍스트 분석 중... (잠시 후 자동 갱신됩니다)', value: '분석중' });
   }
@@ -3584,7 +3863,7 @@ function checkMarginRegion(imageData, side, marginPx, title) {
   };
 }
 
-// ============ 지면·타입별 영역 가이드 (오버레이용, 위치는 참고용) ============
+// ============ 지면·타입별 영역 가이드 (공식 PSD 템플릿 원본 좌표 기준) ============
 const REGION_COLORS = {
   logo: '#94a3b8',
   text: '#f59e0b',
@@ -3597,80 +3876,135 @@ const REGION_COLORS = {
 function getRegions() {
   const c = state.category, t = state.type;
   const R = [];
-  const box = (x, y, w, h, kind, label, dash) => R.push({ x, y, w, h, stroke: REGION_COLORS[kind] || '#94a3b8', label, dash: !!dash });
+  const box = (x, y, w, h, kind, label, dash, key) =>
+    R.push({ x, y, w, h, stroke: REGION_COLORS[kind] || '#94a3b8', label, dash: !!dash, key: key || null });
 
   if (c === 'splash') {
     if (t === 'basic') {
-      box(325, 60, 350, 70, 'logo', '로고 350×70');
-      box(150, 180, 700, 150, 'text', '텍스트 12~22자');
-      box(150, 340, 700, 60, 'simui', '심의필 ≤100자');
-      box(0, 370, 1000, 630, 'image', '이미지 최대 1000×630 (심의필 O)');
-      box(100, 520, 800, 480, 'image', '최소 800×480', true);
+      box(362, 5, 275, 56, 'logo', '로고 (상단, 최대 350×70)');
+      box(198, 121, 605, 131, 'text', '메인텍스트 (PSD)', false, 'maintext');
+      box(368, 286, 264, 55, 'simui', '심의필 (PSD)');
+      box(0, 370, 1000, 630, 'image', '이미지 최대 1000×630 (심의필 O)', true);
+      box(246, 423, 508, 577, 'image', '이미지 예시 위치 (PSD)');
     } else if (t === 'img') {
-      box(325, 60, 350, 70, 'logo', '타이틀(로고) 350×70');
-      box(150, 180, 700, 150, 'text', '텍스트 12~22자');
-      box(75, 420, 850, 550, 'image', '이미지 850×550 (그래픽 ≤60%)');
+      box(362, 5, 275, 56, 'logo', '타이틀(로고) 상단');
+      box(198, 121, 605, 131, 'text', '메인텍스트 (PSD)', false, 'maintext');
+      box(73, 309, 854, 554, 'image', '이미지 850×550 (PSD)');
+      box(368, 809, 264, 22, 'simui', '심의필 (이미지 하단)');
     } else if (t === 'full_bg') {
       box(0, 0, 2520, 2500, 'image', '배경 2520×2500 (불투명)');
+      box(812, 671, 894, 1829, 'sub', '기기 노출 예시 영역 (PSD)', true);
     } else if (t === 'full_logo') {
-      box(0, 0, 1000, 500, 'logo', '로고 1000×500 (투명 배경)');
+      box(308, 97, 365, 134, 'logo', '로고 배치 (PSD, 가운데·수직)');
     } else if (t === 'full_img') {
-      box(0, 0, 1000, 1000, 'image', '이미지 1000×1000 (투명 배경)');
+      box(153, 0, 695, 150, 'text', '텍스트 권장 영역 (이동 가능)', false, 'maintext');
+      box(52, 20, 894, 980, 'image', '이미지 영역 (PSD)');
     }
   } else if (c === 'append') {
-    box(148, 110, 375, 70, 'logo', '로고 375×70');
-    box(70, 220, 532, 130, 'text', '텍스트 12~22자');
-    box(20, 390, 632, 700, 'image', '이미지 영역');
-    box(70, 1130, 532, 60, 'simui', '심의필 ≤100자 (없을 시 삭제)');
+    box(76, 91, 519, 117, 'text', '텍스트 영역 (PSD)', false, 'maintext');
+    box(84, 261, 504, 282, 'sub', '로고·텍스트 비율 가이드 (가운데 정렬, 이동 가능)', true);
+    box(176, 1205, 318, 41, 'simui', '심의필 (없을 시 영역 삭제)');
   } else if (c === 'homepopup') {
-    box(180, 55, 390, 50, 'logo', '로고 390×50');
-    box(60, 125, 630, 130, 'text', '텍스트 ≤30자');
-    box(60, 330, 630, 290, 'image', '이미지·심의필 630×290');
+    box(60, 52, 630, 470, 'sub', '콘텐츠 안전 영역 (PSD 가이드)', true);
+    box(188, 120, 375, 88, 'text', '메인텍스트 (PSD)', false, 'maintext');
+    box(297, 503, 155, 16, 'simui', '심의필');
+    box(231, 567, 289, 27, 'badge', 'CTA 버튼 문구 ≤12자');
+    box(60, 32, 665, 594, 'logo', 'AD·버튼 프레임 (수정금지)', true);
   } else if (c === 'banner') {
     if (t === 'basic') {
-      box(60, 54, 150, 150, 'logo', '로고 150×150');
-      box(255, 40, 470, 178, 'text', '메인16 · 서브20 · 심의필40자');
-      box(775, 0, 350, 258, 'image', '이미지 350×258');
+      box(59, 54, 150, 150, 'logo', '로고 150×150 (PSD)');
+      box(60, 65, 573, 85, 'text', '메인텍스트 (두줄·한줄, PSD)', false, 'maintext');
+      box(60, 125, 418, 30, 'sub', '서브텍스트 (PSD)');
+      box(60, 171, 319, 22, 'simui', '심의필 (PSD)');
+      box(775, 0, 350, 258, 'image', '이미지 최대 350×258', true);
+      box(804, 0, 247, 258, 'image', '이미지 예시 (PSD)');
     } else if (t === 'img') {
-      box(60, 54, 150, 150, 'logo', '로고 150×150');
-      box(255, 40, 470, 178, 'text', '메인16 · 서브20자');
-      box(775, 29, 320, 200, 'image', '이미지 320×200');
-      box(815, 64, 240, 130, 'image', '그래픽 ≤240×130', true);
+      box(59, 52, 152, 153, 'logo', '로고 (배경컬러 변경 가능)');
+      box(60, 65, 573, 85, 'text', '메인텍스트 (두줄·한줄, PSD)', false, 'maintext');
+      box(60, 125, 418, 30, 'sub', '서브텍스트 (PSD)');
+      box(60, 171, 319, 22, 'simui', '심의필 (PSD)');
+      box(743, 27, 323, 204, 'image', '이미지 320×200 (PSD)');
+      box(785, 64, 240, 130, 'image', '그래픽·로고 ≤240×130', true);
     } else if (t === 'full') {
-      box(60, 18, 1005, 222, 'image', '이미지 1005×222');
+      box(58, 16, 1009, 225, 'image', '이미지 1005×222 (PSD)');
       box(100, 53, 925, 152, 'logo', '로고·그래픽 ≤925×152', true);
     } else if (t === 'video') {
-      box(40, 35, 396, 152, 'logo', '로고·그래픽 396×152');
       box(0, 0, 1005, 222, 'image', '썸네일 1005×222');
+      box(40, 35, 396, 152, 'logo', '로고·그래픽 최대 396×152', true);
+      box(86, 41, 238, 143, 'logo', '로고 예시 (PSD)');
     }
   } else if (c === 'keyword') {
     if (t === 'basic') {
-      box(30, 30, 340, 136, 'text', '메인16 · 서브20자 (좌측정렬)');
-      box(390, 0, 280, 196, 'image', '이미지 280×196');
+      box(40, 48, 299, 68, 'text', '메인텍스트 (PSD)', false, 'maintext');
+      box(38, 128, 280, 19, 'sub', '서브텍스트 + > 아이콘 (PSD)');
+      box(430, 16, 207, 180, 'image', '이미지 (PSD 예시)');
+      box(626, 19, 26, 13, 'badge', 'AD마크', true);
     } else if (t === 'full') {
       box(0, 0, 670, 196, 'image', '풀이미지 (텍스트·로고 ≤50%)');
+      box(626, 19, 26, 13, 'badge', 'AD마크', true);
     } else if (t === 'list') {
-      box(30, 25, 90, 35, 'badge', '뱃지 90×35 · ≤6자');
-      box(30, 72, 400, 94, 'text', '메인16 · 서브20자');
-      box(460, 0, 210, 196, 'image', '이미지 210×196');
+      box(0, 0, 211, 196, 'image', '이미지 210×196 (좌측)');
+      box(227, 15, 97, 36, 'badge', '뱃지 90×35 · ≤6자');
+      box(230, 67, 299, 30, 'text', '메인텍스트 (PSD)', false, 'maintext');
+      box(229, 114, 314, 60, 'sub', '서브텍스트 (PSD)');
     } else if (t === 'video') {
-      box(30, 28, 320, 140, 'logo', '로고 320×140');
-      box(467, 71, 173, 53, 'sub', '재생버튼 (시스템)', true);
+      box(74, 39, 200, 120, 'logo', '로고 (최대 320×140, PSD)');
+      box(24, 28, 621, 145, 'sub', '콘텐츠 안전 영역 (PSD)', true);
     }
   } else if (c === 'topbanner') {
     if (t === 'mobile') {
-      box(40, 26, 250, 30, 'logo', '로고 250×30');
-      box(40, 76, 350, 130, 'text', '텍스트 ≤22자');
-      box(400, 0, 350, 240, 'image', '이미지 350×240');
-      box(330, 0, 420, 240, 'image', '최대 420×240', true);
+      box(41, 50, 117, 22, 'logo', '번개장터 로고 (수정금지)');
+      box(170, 49, 106, 20, 'badge', '브랜드 로고 위치 (PSD)');
+      box(41, 92, 299, 75, 'text', '메인텍스트 (PSD)', false, 'maintext');
+      box(455, 32, 231, 208, 'image', '이미지 예시 (PSD)');
+      box(330, 0, 420, 240, 'image', '이미지 최대 420×240', true);
     } else {
-      box(120, 90, 600, 70, 'logo', '로고 600×70');
-      box(120, 220, 1000, 250, 'text', '텍스트 ≤22자');
-      box(1680, 0, 800, 600, 'image', '이미지 800×600');
-      box(1180, 0, 1300, 600, 'image', '최대 1300×600', true);
+      box(242, 157, 276, 52, 'logo', '번개장터 로고 (수정금지)');
+      box(244, 255, 673, 171, 'text', '메인텍스트 (PSD)', false, 'maintext');
+      box(1680, 0, 800, 600, 'image', '핵심 오브젝트 800×600');
+      box(1180, 0, 1300, 600, 'image', '이미지 최대 1300×600', true);
     }
   }
   return R;
+}
+
+// OCR 전처리 스케일 (bbox → 원본 좌표 환산용)
+function ocrScaleFactor(img) {
+  return Math.max(1, Math.min(3, 2000 / Math.max(img.width, img.height)));
+}
+
+// OCR 메인 텍스트가 PSD 지정 텍스트 영역 내에 있는지 (참고용)
+function checkTextRegionPosition(advanced) {
+  const s = currentSpec();
+  const img = state.img;
+  if (!img || img.width !== s.w || img.height !== s.h) return;
+  const lines = ocrLinesBySize();
+  if (!lines || !lines.main) return;
+  const region = getRegions().find(r => r.key === 'maintext');
+  if (!region) return;
+  const k = ocrScaleFactor(img);
+  const b = lines.main.bbox;
+  const x0 = b.x0 / k, x1 = b.x1 / k, y0 = b.y0 / k, y1 = b.y1 / k;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const tolX = s.w * 0.05, tolY = s.h * 0.07;
+  const inside = cx >= region.x - tolX && cx <= region.x + region.w + tolX &&
+                 cy >= region.y - tolY && cy <= region.y + region.h + tolY;
+  const overflowX = (x1 - x0) > region.w * 1.18;
+  if (inside && !overflowX) {
+    advanced.push({
+      title: '텍스트 위치 (PSD 템플릿 기준)',
+      status: 'pass',
+      detail: `메인 텍스트가 PSD 템플릿 텍스트 영역(${region.w}×${region.h}px) 안에 위치합니다`,
+      value: '영역 내'
+    });
+  } else {
+    advanced.push({
+      title: '텍스트 위치·폭 (PSD 템플릿 기준)',
+      status: 'warn',
+      detail: `메인 텍스트가 PSD 템플릿의 텍스트 영역(${region.w}×${region.h}px, 좌상단 ${region.x},${region.y})을 벗어난 것으로 보입니다${overflowX ? ' — 텍스트 폭이 지정 영역보다 넓습니다' : ''}. OCR 추정치이므로 '영역 가이드' 보기로 확인해주세요`,
+      value: '확인필요'
+    });
+  }
 }
 
 function analyzeRegionColors(imageData, box) {
@@ -3824,7 +4158,7 @@ function renderPreviewInfo() {
     <span><strong>해상도</strong> ${img.width}×${img.height}</span>
     <span><strong>비율</strong> ${(img.width/img.height).toFixed(3)}</span>
     <span><strong>용량</strong> ${sizeStr}</span>
-    <span><strong>형식</strong> ${state.fileFormat.toUpperCase()}${state.isPng24 ? '-24' : ''}</span>
+    <span><strong>형식</strong> ${String(state.fileFormat || '-').toUpperCase()}${state.isPng24 ? '-24' : ''}</span>
     <span><strong>가이드</strong> ${s.w}×${s.h} · ${s.formats.map(f => f.toUpperCase()).join('/')} (+PSD 원본) · ≤${s.kb}KB</span>
   `;
 }
