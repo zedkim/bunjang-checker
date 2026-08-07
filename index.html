@@ -206,6 +206,9 @@
 @media (max-width: 900px) { .global-search { display: none; } }
 .search-flash { animation: searchFlash 2s ease; }
 @keyframes searchFlash { 0%, 40% { box-shadow: 0 0 0 3px #FFE500; } 100% { box-shadow: none; } }
+
+/* 한국어 단어 중간 줄바꿈 방지 (전체 적용) */
+body { word-break: keep-all; overflow-wrap: break-word; }
 </style>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://unpkg.com/ag-psd@25/dist/bundle.js"></script>
@@ -2178,7 +2181,7 @@ html, body {
 
     <div class="notice-box">
       <strong>💡 자동 검수 안내</strong>
-      해상도·용량·형식·색상·영역 위치(공식 PSD 템플릿 좌표 기준)를 검수합니다. <strong>작업 PSD 파일을 업로드하면 폰트·사이즈·컬러·레이어 구성까지 정밀 검수</strong>됩니다. 이미지 OCR은 참고용이며 디자인 의도는 담당자가 최종 확인합니다.
+      해상도·용량·형식·색상·영역 위치(공식 PSD 템플릿 좌표 기준)를 검수합니다. <strong>작업 PSD 파일을 업로드하면 폰트·사이즈·컬러·레이어 구성까지 정밀 검수됩니다</strong>. 이미지 OCR은 참고용이며 디자인 의도는 담당자가 최종 확인합니다.
     </div>
   </aside>
 
@@ -2190,7 +2193,7 @@ html, body {
         <path d="M21 15l-5-5L5 21"/>
       </svg>
       <h2>검수할 소재를 업로드하세요</h2>
-      <p>이미지를 업로드하면 사이즈를 분석해 광고 지면(스플래시 · 앱종료 · 홈팝업 · 브랜드 배너 · 키워드 상단배너 · 탑배너)이 <strong>자동 선택</strong>됩니다.<br/>좌측에서 소재 타입을 선택하면 v2026.3Q 가이드 규격에 따라 자동 검수합니다.</p>
+      <p>이미지를 업로드하면 사이즈를 분석해 광고 지면(스플래시 · 앱종료 · 홈팝업 · 브랜드 배너 · 키워드 상단배너 · 탑배너)이 <strong>자동 선택됩니다</strong>.<br/>좌측에서 소재 타입을 선택하면 v2026.3Q 가이드 규격에 따라 자동 검수합니다.</p>
       <button class="empty-upload-btn" id="emptyUploadBtn">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
@@ -3229,7 +3232,7 @@ function runPsdChecks(psd, file) {
         advanced.push({
           title: `[텍스트] ${f.name.slice(0, 24)}`,
           status: 'info',
-          detail: '이 영역은 가독성을 전제로 <strong>폰트 커스텀이 허용</strong>됩니다',
+          detail: '이 영역은 가독성을 전제로 <strong>폰트 커스텀이 허용됩니다</strong>',
           value: '커스텀 가능'
         });
       }
@@ -5826,6 +5829,9 @@ const GUIDE_DATA = {
               <div class="info-callout" style="margin-top:12px">
                 <strong>참고</strong> 앱 내 뷰어 정책으로 AOS 운영체제에서는 가로모드가 지원되지 않습니다.
               </div>
+              <div class="warn-callout" style="margin-top:12px">
+                <strong>📢 동영상 소재는 별도 문의</strong> 동영상 파일은 본 검수 페이지에서 자동 검수되지 않습니다. 제작 전 <strong>담당 AM에게 별도 문의</strong> 후 파일을 직접 전달해 주세요.
+              </div>
             `
           },
           {
@@ -5852,7 +5858,7 @@ const GUIDE_DATA = {
             title: '카피 문구 가이드 (글자 수 기준)', page: 'guides2607/bungaetalk-copy.webp',
             badge: '필수',
             content: `
-              <p style="font-size:12.5px;color:var(--text-dim);line-height:1.7;margin-bottom:12px">번개톡 광고의 문구는 소재 이미지가 아닌 <strong>어드민에 텍스트로 입력</strong>됩니다. 좌측 지면 안내 이미지를 참고해, 각 노출 위치의 문구를 아래 글자 수 기준(모두 공백 포함)에 맞춰 작성해주세요.</p>
+              <p style="font-size:12.5px;color:var(--text-dim);line-height:1.7;margin-bottom:12px">번개톡 광고의 문구는 소재 이미지가 아닌 <strong>어드민에 텍스트로 입력됩니다</strong>. 좌측 지면 안내 이미지를 참고해, 각 노출 위치의 문구를 아래 글자 수 기준(모두 공백 포함)에 맞춰 작성해주세요.</p>
               <table class="spec-table">
                 <thead><tr><th>구분</th><th>항목</th><th>기준</th></tr></thead>
                 <tbody>
