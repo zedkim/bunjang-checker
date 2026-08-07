@@ -5826,6 +5826,9 @@ const GUIDE_DATA = {
               <div class="info-callout" style="margin-top:12px">
                 <strong>참고</strong> 앱 내 뷰어 정책으로 AOS 운영체제에서는 가로모드가 지원되지 않습니다.
               </div>
+              <div class="warn-callout" style="margin-top:12px">
+                <strong>📢 동영상 소재는 별도 문의</strong> 동영상 파일은 본 검수 페이지에서 자동 검수되지 않습니다. 제작 전 <strong>담당 AM에게 별도 문의</strong> 후 파일을 직접 전달해 주세요.
+              </div>
             `
           },
           {
@@ -5849,7 +5852,7 @@ const GUIDE_DATA = {
           },
           {
             icon: '✍️',
-            title: '카피 문구 가이드 (글자 수 기준)', page: 87,
+            title: '카피 문구 가이드 (글자 수 기준)', page: 'guides2607/bungaetalk-copy.webp',
             badge: '필수',
             content: `
               <p style="font-size:12.5px;color:var(--text-dim);line-height:1.7;margin-bottom:12px">번개톡 광고의 문구는 소재 이미지가 아닌 <strong>어드민에 텍스트로 입력</strong>됩니다. 좌측 지면 안내 이미지를 참고해, 각 노출 위치의 문구를 아래 글자 수 기준(모두 공백 포함)에 맞춰 작성해주세요.</p>
@@ -5978,7 +5981,7 @@ function renderGuide() {
         <div class="placement-card">
           <div class="placement-mockup">
             ${p.image
-              ? `<img src="${p.image}" alt="${p.name}" loading="lazy" onerror="this.style.display='none';this.parentElement.innerHTML='<div style=\\'color:var(--text-mute);font-size:11px;text-align:center;padding:12px\\'>이미지를 불러올 수 없습니다<br/>(${p.image})</div>'"/>`
+              ? `<img src="${p.image}" alt="${p.name}" loading="lazy" onerror="var c=this.closest('.placement-card');if(c)c.style.display='none';"/>`
               : `<div style="color:var(--text-mute);font-size:12px">${p.name}</div>`
             }
           </div>
@@ -6048,7 +6051,7 @@ function renderGuide() {
         splitImgHTML = `
           <div class="guide-split-img">
             <img src="${src}" data-img-idx="${imgIdx}" loading="lazy" alt="${item.title} 가이드 예시"
-              onerror="this.parentElement.innerHTML='<div class=&quot;guide-example-error&quot;><div class=&quot;err-title&quot;>가이드 예시 이미지가 표시되지 않습니다</div><div class=&quot;err-desc&quot;>${src} 파일이 저장소에 업로드되었는지 확인해주세요.</div></div>'"/>
+              onerror="var w=this.closest('.guide-split');if(w){var b=w.querySelector('.guide-split-body');if(b){b.style.flex='1 1 100%';b.style.maxWidth='100%';}}var i=this.closest('.guide-split-img');if(i)i.style.display='none';"/>
             <div class="guide-split-caption">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <rect x="3" y="3" width="18" height="18" rx="2"/>
