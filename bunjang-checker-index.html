@@ -1909,6 +1909,10 @@ html, body {
       <div class="section-title">1. 광고 카테고리</div>
       <div class="cat-tabs" id="catTabs">
         <button class="cat-tab active" data-cat="banner">브랜드 배너</button>
+        <button class="cat-tab" data-cat="keyword">키워드 배너</button>
+        <button class="cat-tab" data-cat="top">탑 배너</button>
+        <button class="cat-tab" data-cat="homepopup">홈팝업</button>
+        <button class="cat-tab" data-cat="shortcut">숏컷</button>
         <button class="cat-tab" data-cat="splash">스플래시</button>
         <button class="cat-tab" data-cat="append">앱종료</button>
       </div>
@@ -2005,7 +2009,59 @@ html, body {
       </div>
     </div>
 
-    <div class="section">
+    <!-- 키워드 배너 (준비 중) -->
+    <div class="cat-section hidden" data-cat="keyword">
+      <div class="section">
+        <div class="warn-callout" style="background:#FFF9E6;border-color:#F5D547;padding:20px">
+          <strong>🔧 자동 검수 준비 중입니다</strong><br>
+          <span style="font-size:13px;color:var(--text-dim);line-height:1.8">
+            키워드 배너는 <strong>브랜드 배너와 동일 규격</strong>으로 제작됩니다.<br>
+            지금은 '브랜드 배너' 탭을 선택해 동일 규격으로 검수하거나, 담당 AM에게 문의해주세요.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 탑 배너 (준비 중) -->
+    <div class="cat-section hidden" data-cat="top">
+      <div class="section">
+        <div class="warn-callout" style="background:#FFF9E6;border-color:#F5D547;padding:20px">
+          <strong>🔧 자동 검수 준비 중입니다</strong><br>
+          <span style="font-size:13px;color:var(--text-dim);line-height:1.8">
+            탑 배너 자동 검수는 <strong>업데이트 예정</strong>입니다.<br>
+            집행을 검토 중이시라면 담당 AM에게 별도 문의해주세요.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 홈팝업 (준비 중) -->
+    <div class="cat-section hidden" data-cat="homepopup">
+      <div class="section">
+        <div class="warn-callout" style="background:#FFF9E6;border-color:#F5D547;padding:20px">
+          <strong>🔧 자동 검수 준비 중입니다</strong><br>
+          <span style="font-size:13px;color:var(--text-dim);line-height:1.8">
+            홈팝업 자동 검수는 <strong>업데이트 예정</strong>입니다.<br>
+            집행을 검토 중이시라면 담당 AM에게 별도 문의해주세요.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 숏컷 (준비 중) -->
+    <div class="cat-section hidden" data-cat="shortcut">
+      <div class="section">
+        <div class="warn-callout" style="background:#FFF9E6;border-color:#F5D547;padding:20px">
+          <strong>🔧 자동 검수 준비 중입니다</strong><br>
+          <span style="font-size:13px;color:var(--text-dim);line-height:1.8">
+            숏컷 자동 검수는 <strong>업데이트 예정</strong>입니다.<br>
+            집행을 검토 중이시라면 담당 AM에게 별도 문의해주세요.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="uploadSection">
       <div class="section-title">이미지 업로드</div>
       <label class="upload-zone" id="uploadZone">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -2025,7 +2081,7 @@ html, body {
       </div>
     </div>
 
-    <div class="section">
+    <div class="section" id="guideSection">
       <div class="section-title">현재 가이드</div>
       <div class="guide-box" id="guideBox">
         <!-- 동적 -->
@@ -2506,6 +2562,9 @@ const state = {
 // ============ UI 이벤트 ============
 
 // 카테고리 탭
+// 자동 검수 미지원 카테고리 (안내만 노출)
+const UNSUPPORTED_CATS = ['keyword', 'top', 'homepopup', 'shortcut'];
+
 document.querySelectorAll('.cat-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
@@ -2514,9 +2573,19 @@ document.querySelectorAll('.cat-tab').forEach(tab => {
     document.querySelectorAll('.cat-section').forEach(s => {
       s.classList.toggle('hidden', s.dataset.cat !== state.category);
     });
-    updateUploadHint();
-    updateGuideBox();
-    if (state.img) runChecks();
+
+    // 준비 중 카테고리는 업로드/가이드 섹션 숨김
+    const isUnsupported = UNSUPPORTED_CATS.includes(state.category);
+    const uploadSection = document.getElementById('uploadSection');
+    const guideSection = document.getElementById('guideSection');
+    if (uploadSection) uploadSection.style.display = isUnsupported ? 'none' : '';
+    if (guideSection) guideSection.style.display = isUnsupported ? 'none' : '';
+
+    if (!isUnsupported) {
+      updateUploadHint();
+      updateGuideBox();
+      if (state.img) runChecks();
+    }
   });
 });
 
