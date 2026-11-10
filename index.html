@@ -2,6 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="description" content="번개장터 외부 광고 소재 검수 도구. 브랜드 배너, 스플래시, 앱종료 광고의 가이드 규격을 자동으로 검수합니다."/>
 <meta name="theme-color" content="#ffffff"/>
@@ -1909,6 +1912,10 @@ html, body {
       <div class="section-title">1. 광고 카테고리</div>
       <div class="cat-tabs" id="catTabs">
         <button class="cat-tab active" data-cat="banner">브랜드 배너</button>
+        <button class="cat-tab" data-cat="keyword">키워드 배너</button>
+        <button class="cat-tab" data-cat="top">탑 배너</button>
+        <button class="cat-tab" data-cat="homepopup">홈팝업</button>
+        <button class="cat-tab" data-cat="shortcut">숏컷</button>
         <button class="cat-tab" data-cat="splash">스플래시</button>
         <button class="cat-tab" data-cat="append">앱종료</button>
       </div>
@@ -2005,7 +2012,59 @@ html, body {
       </div>
     </div>
 
-    <div class="section">
+    <!-- 키워드 배너 (준비 중) -->
+    <div class="cat-section hidden" data-cat="keyword">
+      <div class="section">
+        <div class="warn-callout" style="background:#FFF9E6;border-color:#F5D547;padding:20px">
+          <strong>🔧 자동 검수 준비 중입니다</strong><br>
+          <span style="font-size:13px;color:var(--text-dim);line-height:1.8">
+            키워드 배너는 <strong>브랜드 배너와 동일 규격</strong>으로 제작됩니다.<br>
+            지금은 '브랜드 배너' 탭을 선택해 동일 규격으로 검수하거나, 담당 AM에게 문의해주세요.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 탑 배너 (준비 중) -->
+    <div class="cat-section hidden" data-cat="top">
+      <div class="section">
+        <div class="warn-callout" style="background:#FFF9E6;border-color:#F5D547;padding:20px">
+          <strong>🔧 자동 검수 준비 중입니다</strong><br>
+          <span style="font-size:13px;color:var(--text-dim);line-height:1.8">
+            탑 배너 자동 검수는 <strong>업데이트 예정</strong>입니다.<br>
+            집행을 검토 중이시라면 담당 AM에게 별도 문의해주세요.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 홈팝업 (준비 중) -->
+    <div class="cat-section hidden" data-cat="homepopup">
+      <div class="section">
+        <div class="warn-callout" style="background:#FFF9E6;border-color:#F5D547;padding:20px">
+          <strong>🔧 자동 검수 준비 중입니다</strong><br>
+          <span style="font-size:13px;color:var(--text-dim);line-height:1.8">
+            홈팝업 자동 검수는 <strong>업데이트 예정</strong>입니다.<br>
+            집행을 검토 중이시라면 담당 AM에게 별도 문의해주세요.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 숏컷 (준비 중) -->
+    <div class="cat-section hidden" data-cat="shortcut">
+      <div class="section">
+        <div class="warn-callout" style="background:#FFF9E6;border-color:#F5D547;padding:20px">
+          <strong>🔧 자동 검수 준비 중입니다</strong><br>
+          <span style="font-size:13px;color:var(--text-dim);line-height:1.8">
+            숏컷 자동 검수는 <strong>업데이트 예정</strong>입니다.<br>
+            집행을 검토 중이시라면 담당 AM에게 별도 문의해주세요.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="uploadSection">
       <div class="section-title">이미지 업로드</div>
       <label class="upload-zone" id="uploadZone">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -2025,7 +2084,7 @@ html, body {
       </div>
     </div>
 
-    <div class="section">
+    <div class="section" id="guideSection">
       <div class="section-title">현재 가이드</div>
       <div class="guide-box" id="guideBox">
         <!-- 동적 -->
@@ -2152,6 +2211,10 @@ html, body {
 
   <div class="guide-cat-tabs">
     <button class="guide-cat-tab active" data-gcat="banner">브랜드 배너</button>
+    <button class="guide-cat-tab" data-gcat="keyword">키워드 배너</button>
+    <button class="guide-cat-tab" data-gcat="top">탑 배너</button>
+    <button class="guide-cat-tab" data-gcat="homepopup">홈팝업</button>
+    <button class="guide-cat-tab" data-gcat="shortcut">숏컷</button>
     <button class="guide-cat-tab" data-gcat="splash">스플래시</button>
     <button class="guide-cat-tab" data-gcat="append">앱종료</button>
   </div>
@@ -2502,6 +2565,9 @@ const state = {
 // ============ UI 이벤트 ============
 
 // 카테고리 탭
+// 자동 검수 미지원 카테고리 (안내만 노출)
+const UNSUPPORTED_CATS = ['keyword', 'top', 'homepopup', 'shortcut'];
+
 document.querySelectorAll('.cat-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
@@ -2510,9 +2576,19 @@ document.querySelectorAll('.cat-tab').forEach(tab => {
     document.querySelectorAll('.cat-section').forEach(s => {
       s.classList.toggle('hidden', s.dataset.cat !== state.category);
     });
-    updateUploadHint();
-    updateGuideBox();
-    if (state.img) runChecks();
+
+    // 준비 중 카테고리는 업로드/가이드 섹션 숨김
+    const isUnsupported = UNSUPPORTED_CATS.includes(state.category);
+    const uploadSection = document.getElementById('uploadSection');
+    const guideSection = document.getElementById('guideSection');
+    if (uploadSection) uploadSection.style.display = isUnsupported ? 'none' : '';
+    if (guideSection) guideSection.style.display = isUnsupported ? 'none' : '';
+
+    if (!isUnsupported) {
+      updateUploadHint();
+      updateGuideBox();
+      if (state.img) runChecks();
+    }
   });
 });
 
@@ -5125,6 +5201,119 @@ const GUIDE_DATA = {
         ]
       }
     ]
+  },
+  keyword: {
+    title: '키워드 배너 가이드',
+    version: 'v2026.3Q',
+    folder: 'guides/banner',
+    spec: [
+      { label: '사이즈', value: '브랜드 배너와 동일 규격' },
+      { label: '파일형식', value: 'PNG-24' },
+      { label: '용량', value: '≤ 500 KB' }
+    ],
+    downloads: [],
+    sections: [
+      {
+        title: '제작 안내',
+        items: [
+          {
+            icon: 'ⓘ',
+            title: '키워드 배너는 브랜드 배너와 동일 규격으로 제작합니다',
+            badge: '안내',
+            content: `
+              <p style="font-size:13px;color:var(--text-dim);line-height:1.8">
+                키워드 배너는 <strong>브랜드 배너와 동일한 제작 규격</strong>을 따릅니다.<br>
+                사이즈, 파일형식, 여백, 카피 스타일 등 모든 제작 가이드를 브랜드 배너 탭에서 확인해주세요.
+              </p>
+              <div class="warn-callout" style="margin-top:14px">
+                <strong>📍 노출 위치</strong> 검색 결과 상단 등 키워드 지면에 노출되는 배너입니다.
+              </div>
+            `
+          }
+        ]
+      }
+    ]
+  },
+  top: {
+    title: '탑 배너 가이드',
+    version: 'v2026.3Q',
+    folder: '',
+    spec: [
+      { label: '상태', value: '업데이트 예정' }
+    ],
+    downloads: [],
+    sections: [
+      {
+        title: '제작 안내',
+        items: [
+          {
+            icon: 'ⓘ',
+            title: '탑 배너 제작 가이드는 업데이트 예정입니다',
+            badge: '안내',
+            content: `
+              <p style="font-size:13px;color:var(--text-dim);line-height:1.8">
+                탑 배너 제작 가이드는 현재 <strong>업데이트 예정</strong>입니다.<br>
+                집행을 검토 중이시라면 담당 AM에게 별도 문의해주세요.
+              </p>
+            `
+          }
+        ]
+      }
+    ]
+  },
+  homepopup: {
+    title: '홈팝업 가이드',
+    version: 'v2026.3Q',
+    folder: '',
+    spec: [
+      { label: '상태', value: '업데이트 예정' }
+    ],
+    downloads: [],
+    sections: [
+      {
+        title: '제작 안내',
+        items: [
+          {
+            icon: 'ⓘ',
+            title: '홈팝업 제작 가이드는 업데이트 예정입니다',
+            badge: '안내',
+            content: `
+              <p style="font-size:13px;color:var(--text-dim);line-height:1.8">
+                홈팝업 제작 가이드는 현재 <strong>업데이트 예정</strong>입니다.<br>
+                집행을 검토 중이시라면 담당 AM에게 별도 문의해주세요.
+              </p>
+            `
+          }
+        ]
+      }
+    ]
+  },
+  shortcut: {
+    title: '숏컷 가이드',
+    version: 'v2026.3Q',
+    folder: '',
+    spec: [
+      { label: '상태', value: '업데이트 예정' }
+    ],
+    downloads: [],
+    sections: [
+      {
+        title: '제작 안내',
+        items: [
+          {
+            icon: 'ⓘ',
+            title: '숏컷 제작 가이드는 업데이트 예정입니다',
+            badge: '안내',
+            content: `
+              <p style="font-size:13px;color:var(--text-dim);line-height:1.8">
+                숏컷 제작 가이드는 현재 <strong>업데이트 예정</strong>입니다.<br>
+                집행을 검토 중이시라면 담당 AM에게 별도 문의해주세요.
+              </p>
+            `
+          }
+        ]
+      }
+    ]
   }
 };
 
@@ -5222,7 +5411,7 @@ function renderGuide() {
   ` : '';
 
   // 4. 다운로드 자료실 (있을 경우)
-  const downloadsHTML = data.downloads ? `
+  const downloadsHTML = (data.downloads && data.downloads.length > 0) ? `
     <div class="download-section">
       <div class="download-section-title">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
