@@ -1985,6 +1985,13 @@ html, body {
               <div class="type-sub">배경 변경 금지</div>
             </div>
           </button>
+          <button class="type-card" data-stype="full">
+            <div class="type-num">3</div>
+            <div class="type-info">
+              <div class="type-name">풀이미지형</div>
+              <div class="type-sub">배경(2520×2500) + 로고(1000×500) + 이미지(1000×1000) 3개 분리 전달</div>
+            </div>
+          </button>
         </div>
       </div>
     </div>
@@ -2466,17 +2473,24 @@ const GUIDES = {
     subCopyColor: '#777777',
     bizboardGray: '#F3F3F3'
   },
-  // 스플래시 (Update 2026.04)
+  // 스플래시 (Update 2026.04 + 풀이미지형 v2026.3Q)
   splash: {
     name: '스플래시',
     width: 1000,
     height: 1000,
+    // 서브타입별 유효 사이즈 (풀이미지형은 3개 파일 중 하나라도 매칭되면 pass)
+    allowedSizes: [
+      { w: 1000, h: 1000, subtype: '기본/이미지형' },
+      { w: 2520, h: 2500, subtype: '풀이미지형 배경' },
+      { w: 1000, h: 500,  subtype: '풀이미지형 로고' }
+    ],
     formats: ['webp', 'png'],
     requirePng24: false,
     maxSizeKB: 350,
     types: {
       obj: '오브젝트형',
-      img: '이미지형'
+      img: '이미지형',
+      full: '풀이미지형 (3분할 전달)'
     },
     bgColor: '#090909',                  // 오브젝트형 고정 배경
     logoArea: { width: 350, height: 70 },
@@ -2728,25 +2742,46 @@ fileInput.addEventListener('change', (e) => {
 function autoDetectCategory(w, h) {
   const ratio = w / h;
   let detected = null;
+  let detectedSubtype = null;
 
   // 정확 매칭 우선
   if ((w === 1125 && h === 352) || (w === 1005 && h === 312)) {
     detected = 'banner';   // 브랜드 배너 (기본/이미지/풀이미지형 또는 동영상형)
   } else if (w === 1000 && h === 1000) {
-    detected = 'splash';   // 스플래시
+    detected = 'splash';   // 스플래시 기본
+  } else if (w === 2520 && h === 2500) {
+    detected = 'splash';   // 스플래시 풀이미지형 배경
+    detectedSubtype = 'full';
+  } else if (w === 1000 && h === 500) {
+    detected = 'splash';   // 스플래시 풀이미지형 로고
+    detectedSubtype = 'full';
   } else if (w === 672 && h === 1132) {
     detected = 'append';   // 앱종료 (구규격)
   } else if (w === 672 && h === 1288) {
     detected = 'append';   // 앱종료 (v2026.3Q)
   } else {
-    // 비율 기반 폴백
-    if (ratio >= 3.0) {
-      detected = 'banner';           // 가로로 긴 배너 비율
-    } else if (Math.abs(ratio - 1) <= 0.05) {
-      detected = 'splash';           // 정사각형 ±5%
-    } else if (ratio >= 0.45 && ratio <= 0.75) {
+    // 비율 기반 폴백 (범위 확대)
+    if (ratio >= 2.5) {
+      detected = 'banner';           // 가로로 긴 배너
+    } else if (Math.abs(ratio - 1) <= 0.10) {
+      detected = 'splash';           // 정사각형 ±10%
+    } else if (ratio >= 0.4 && ratio <= 0.85) {
       detected = 'append';           // 세로로 긴 앱종료 비율
+    } else if (ratio > 1.0 && ratio < 2.5) {
+      detected = 'banner';           // 가로>세로지만 배너보다 짧음 → 배너로 추정
+    } else if (ratio < 0.4) {
+      detected = 'append';           // 매우 세로로 긴 경우도 앱종료
     }
+  }
+
+  // 풀이미지형 서브타입 자동 선택
+  if (detectedSubtype === 'full' && detected === 'splash') {
+    state.splashType = 'full';
+    setTimeout(() => {
+      document.querySelectorAll('[data-stype]').forEach(x => {
+        x.classList.toggle('active', x.dataset.stype === 'full');
+      });
+    }, 0);
   }
 
   if (!detected || detected === state.category) return;
@@ -3287,12 +3322,22 @@ function runSplashChecks() {
   const img = state.img;
   const sizeKB = state.fileBytes / 1024;
 
-  // 사이즈
-  const sizeMatch = (img.width === g.width && img.height === g.height);
+  // 사이즈 — 풀이미지형은 3가지 분리 파일(2520×2500 / 1000×500 / 1000×1000) 중 하나로 매칭
+  let sizeMatch, sizeDetail;
+  if (state.splashType === 'full') {
+    const matched = (g.allowedSizes || []).find(s => s.w === img.width && s.h === img.height);
+    sizeMatch = !!matched;
+    sizeDetail = sizeMatch
+      ? `정확한 권장 사이즈입니다 (${matched.subtype})`
+      : `풀이미지형은 다음 3개 사이즈 중 하나여야 합니다: <code>2520×2500</code>(배경), <code>1000×500</code>(로고), <code>1000×1000</code>(이미지)`;
+  } else {
+    sizeMatch = (img.width === g.width && img.height === g.height);
+    sizeDetail = sizeMatch ? '정확한 권장 사이즈입니다' : `필수: <code>${g.width}×${g.height}px</code>`;
+  }
   basic.push({
     title: '이미지 사이즈',
     status: sizeMatch ? 'pass' : 'fail',
-    detail: sizeMatch ? '정확한 권장 사이즈입니다' : `필수: <code>${g.width}×${g.height}px</code>`,
+    detail: sizeDetail,
     value: `${img.width}×${img.height}`
   });
 
@@ -4677,13 +4722,13 @@ const GUIDE_DATA = {
 
   splash: {
     title: '스플래시 가이드',
-    version: 'Update 2026.04',
+    version: 'v2026.3Q',
     folder: 'guides/splash',
     spec: [
-      { label: '작업 사이즈', value: '1000 × 1000 px' },
+      { label: '사이즈 (기본/이미지형)', value: '1000 × 1000 px' },
+      { label: '사이즈 (풀이미지형)', value: '배경 2520×2500 + 로고 1000×500 + 이미지 1000×1000 (3개 분리)' },
       { label: '용량', value: '≤ 350 KB' },
-      { label: '폰트', value: 'Pretendard Variable' },
-      { label: '광고 타입', value: '오브젝트형 / 이미지형' }
+      { label: '광고 타입', value: '오브젝트형 / 이미지형 / 풀이미지형' }
     ],
     intro: `<strong>스플래시</strong>는 앱 실행 시 또는 앱 진입 후 첫 화면에 노출되는 광고입니다. 모든 디바이스(태블릿/폴더블 포함) 대응 영역을 고려해 제작되어야 하며, <span class="hl-fail">파일 형식·작업 사이즈·용량 가이드를 준수하지 않을 경우 소재가 반려</span>됩니다.`,
     placements: [
